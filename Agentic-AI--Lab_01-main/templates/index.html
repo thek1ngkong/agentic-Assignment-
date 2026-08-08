@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Text-to-SQL Assistant | College AI Lab Project</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <h1>Text-to-SQL Assistant</h1>
+      <p>Convert natural English questions into SQLite queries powered by Ollama LLM</p>
+      <span class="badge">SQLite • Ollama • Flask Lab</span>
+    </header>
+
+    <div class="layout">
+      <!-- Database Schema Viewer -->
+      <details class="schema-details">
+        <summary>🔍 View Database Schema (students table)</summary>
+        <pre>{{ schema }}</pre>
+      </details>
+
+      <!-- Input Card -->
+      <div class="card">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+          Ask a Question
+        </div>
+        
+        <div class="input-group">
+          <textarea id="questionInput" placeholder="e.g., Show students who scored more than 80"></textarea>
+          
+          <div class="controls-row">
+            <div class="model-select-group">
+              <label for="modelSelect">Ollama Model:</label>
+              <select id="modelSelect">
+                <option value="llama3" selected>llama3</option>
+                <option value="llama3.2">llama3.2</option>
+                <option value="qwen2.5">qwen2.5</option>
+                <option value="mistral">mistral</option>
+              </select>
+            </div>
+
+            <button id="askBtn" class="btn-primary" onclick="submitQuestion()">
+              <span id="btnText">Ask LLM</span>
+              <span id="btnSpinner" class="spinner" style="display: none;"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Sample Questions -->
+        <div class="samples-container">
+          <div class="samples-title">Try Example Questions:</div>
+          <div class="chips">
+            <button class="chip" onclick="fillQuestion(this.innerText)">Show students who scored more than 80</button>
+            <button class="chip" onclick="fillQuestion(this.innerText)">List all students in the Computer Science department</button>
+            <button class="chip" onclick="fillQuestion(this.innerText)">What is the highest marks scored by any student?</button>
+            <button class="chip" onclick="fillQuestion(this.innerText)">Show student name and marks for Electronics department ordered by marks descending</button>
+            <button class="chip" onclick="fillQuestion(this.innerText)">Count how many students are in each department</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Warning Banner (Ollama Offline / Demo Mode) -->
+      <div id="warningCard" class="warning-box" style="display: none;">
+        ⚡ <span id="warningText"></span>
+      </div>
+
+      <!-- Error Message Banner -->
+      <div id="errorCard" class="error-box" style="display: none;">
+        <strong>Error:</strong> <span id="errorText"></span>
+      </div>
+
+      <!-- Generated SQL Output Section -->
+      <div class="card" id="sqlCard" style="display: none;">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+          Generated SQL Query <span id="sqlSource" style="font-size: 0.75rem; color: var(--accent-purple); font-weight: normal; margin-left: 0.5rem;"></span>
+        </div>
+        <div class="code-container">
+          <button class="copy-btn" onclick="copySQL()">Copy SQL</button>
+          <pre><code id="sqlOutput">-- SQL will appear here...</code></pre>
+        </div>
+      </div>
+
+      <!-- Results Table Section -->
+      <div class="card" id="resultCard" style="display: none;">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24"><path d="M3 3v18h18V3H3zm8 16H5v-4h6v4zm0-6H5V9h6v4zm0-6H5V5h6v2zm8 12h-6v-4h6v4zm0-6h-6V9h6v4zm0-6h-6V5h6v2z"/></svg>
+          Query Results (<span id="rowCount">0</span> rows)
+        </div>
+        
+        <div class="table-responsive">
+          <table id="resultsTable">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+        <div id="emptyResults" class="empty-state" style="display: none;">No records found.</div>
+      </div>
+    </div>
+
+    <footer>
+      Text-to-SQL College Lab Project • Built with Python, Flask, SQLite & Ollama
+    </footer>
+  </div>
+
+  <script>
+    function fillQuestion(text) {
+      document.getElementById('questionInput').value = text;
+      document.getElementById('questionInput').focus();
+    }
+
+    function copySQL() {
+      const sqlText = document.getElementById('sqlOutput').innerText;
+      navigator.clipboard.writeText(sqlText).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.innerText = 'Copied!';
+        setTimeout(() => btn.innerText = 'Copy SQL', 2000);
+      });
+    }
+
+    async function submitQuestion() {
+      const questionInput = document.getElementById('questionInput');
+      const question = questionInput.value.trim();
+      const model = document.getElementById('modelSelect').value;
+
+      if (!question) {
+        alert('Please type a question before asking!');
+        return;
+      }
+
+      // UI state reset
+      const askBtn = document.getElementById('askBtn');
+      const btnText = document.getElementById('btnText');
+      const btnSpinner = document.getElementById('btnSpinner');
+      const sqlCard = document.getElementById('sqlCard');
+      const resultCard = document.getElementById('resultCard');
+      const errorCard = document.getElementById('errorCard');
+      const warningCard = document.getElementById('warningCard');
+
+      askBtn.disabled = true;
+      btnText.innerText = 'Generating SQL...';
+      btnSpinner.style.display = 'inline-block';
+      
+      sqlCard.style.display = 'none';
+      resultCard.style.display = 'none';
+      errorCard.style.display = 'none';
+      warningCard.style.display = 'none';
+
+      try {
+        const response = await fetch('/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: question, model: model })
+        });
+
+        const data = await response.json();
+
+        if (data.warning) {
+          document.getElementById('warningText').innerText = data.warning;
+          warningCard.style.display = 'block';
+        }
+
+        if (data.sql) {
+          document.getElementById('sqlOutput').innerText = data.sql;
+          document.getElementById('sqlSource').innerText = data.source ? `(${data.source})` : '';
+          sqlCard.style.display = 'block';
+        }
+
+        if (data.success) {
+          renderTable(data.columns, data.results);
+          resultCard.style.display = 'block';
+        } else {
+          document.getElementById('errorText').innerText = data.error || 'An unexpected error occurred.';
+          errorCard.style.display = 'block';
+        }
+      } catch (err) {
+        document.getElementById('errorText').innerText = 'Network error: ' + err.message;
+        errorCard.style.display = 'block';
+      } finally {
+        askBtn.disabled = false;
+        btnText.innerText = 'Ask LLM';
+        btnSpinner.style.display = 'none';
+      }
+    }
+
+    function renderTable(columns, results) {
+      const tableHead = document.getElementById('tableHead');
+      const tableBody = document.getElementById('tableBody');
+      const rowCount = document.getElementById('rowCount');
+      const emptyResults = document.getElementById('emptyResults');
+
+      tableHead.innerHTML = '';
+      tableBody.innerHTML = '';
+
+      if (!columns || columns.length === 0) {
+        emptyResults.style.display = 'block';
+        rowCount.innerText = '0';
+        return;
+      }
+
+      emptyResults.style.display = 'none';
+      rowCount.innerText = results.length;
+
+      // Header row
+      let headerTr = '<tr>';
+      columns.forEach(col => {
+        headerTr += `<th>${escapeHtml(col)}</th>`;
+      });
+      headerTr += '</tr>';
+      tableHead.innerHTML = headerTr;
+
+      // Data rows
+      results.forEach(row => {
+        let tr = '<tr>';
+        columns.forEach(col => {
+          const val = row[col] !== null && row[col] !== undefined ? row[col] : '';
+          tr += `<td>${escapeHtml(String(val))}</td>`;
+        });
+        tr += '</tr>';
+        tableBody.innerHTML += tr;
+      });
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    document.getElementById('questionInput').addEventListener('keydown', function(e) {
+      if (e.ctrlKey && e.key === 'Enter') {
+        submitQuestion();
+      }
+    });
+  </script>
+</body>
+</html>
