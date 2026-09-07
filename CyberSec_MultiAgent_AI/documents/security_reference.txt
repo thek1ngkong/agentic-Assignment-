@@ -1,0 +1,11 @@
+Cybersecurity Defensive Reference
+
+Brute-force authentication attacks involve repeated login attempts against an account or service. Indicators can include many failed authentication events from one source within a short period.
+
+Recommended defensive controls include multi-factor authentication, strong unique passwords, account lockout or rate limiting, IP reputation controls, monitoring, alerting, and tools such as fail2ban where appropriate.
+
+Severity should consider event frequency, affected account, whether authentication succeeded, privilege level, source reputation, and evidence of lateral movement or persistence.
+
+Security analysts should preserve relevant timestamps, source addresses, usernames, event types, and surrounding context. A successful login following many failures deserves additional investigation.
+
+Reports should distinguish observed evidence from assumptions and should provide actionable mitigation steps.
